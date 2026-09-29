@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Choosing a section</title>
+  <link rel="stylesheet" href="../../lib/study-kit.css">
+  <style>
+    .prof-panel { border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin: 0 0 16px; background: var(--surface); }
+    .prof-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; }
+    .prof-head h3 { margin: 0; }
+    .prof-score { color: var(--muted); font-size: 0.92rem; }
+    .review { padding: 10px 0; border-top: 1px solid var(--border); }
+    .review:first-child { border-top: none; }
+    .review .stars { color: var(--accent); font-weight: 600; letter-spacing: 1px; margin-right: 6px; }
+    .review p { margin: 4px 0 0; }
+  </style>
+</head>
+<body>
+<script src="../../lib/study-kit.js"></script>
+<script>
+/*
+ * Asteroid Team — Wed 12:10
+ * Question:  Does the order positive/negative reviews appear in on CULPA (halo effect) sway an
+ *            actual enrollment choice, not just a stated likelihood rating?
+ * Design:    Between subjects, 2 conditions (pos_first / neg_first). Redesigned with Mal from the
+ *            team's original single-professor, 1-5 "how likely to enroll" rating: a bare Likert
+ *            score is a weak DV (too many reasons besides reviews to pick a number), so this
+ *            forces an actual binary choice against a held-constant alternative instead.
+ *            Participant must pick between two sections of the same (unnamed, generic) required
+ *            course, taught by two professors with the SAME review count (12) and SAME average
+ *            (4.0): Professor A is the focal professor — same 12 reviews as the team's original
+ *            halo-effect design, just re-ordered by condition (positive block first vs negative
+ *            block first). Professor B is the neutral anchor — a matched-but-differently-worded
+ *            set of 12 reviews (same categories/star values) whose display order is reshuffled
+ *            fresh for every participant, independent of condition. Which professor's panel is
+ *            shown first on the page is also randomized per participant, independent of both.
+ * Measures:  binary choice (A/B, then coded focal_chosen); which 3 reviews (from the chosen
+ *            professor only) most shaped the choice, as a secondary/process measure — carried
+ *            over from the team's original "rank top 3 comments" item (unordered select, since
+ *            study-kit has no drag-rank widget).
+ */
+(async () => {
+  const kit = await StudyKit.start({ id: 'asteroid-1210', conditions: ['pos_first', 'neg_first'] });
+
+  // Matched category/star structure, reused for both professors: 7×5★, 1×4★, 1×3★, 3×2★ = 12
+  // reviews, average exactly 4.0. The "positive block" is the 9 five/four/three-star reviews in
+  // this order; the "negative block" is the 3 two-star reviews in this order.
+  const FOCAL_POS = [
+    { id: 'f1', stars: 5, text: 'Explains concepts clearly — one of the best lecturers I’ve had.' },
+    { id: 'f2', stars: 5, text: 'Genuinely made me excited about the material every week.' },
+    { id: 'f3', stars: 5, text: 'Grading was transparent and fair, rubrics posted in advance.' },
+    { id: 'f4', stars: 5, text: 'Always available during office hours, quick to respond to emails.' },
+    { id: 'f5', stars: 5, text: 'Syllabus was followed exactly, no last-minute surprises.' },
+    { id: 'f6', stars: 5, text: 'Exams tested exactly what was covered in lecture, not obscure trick questions.' },
+    { id: 'f7', stars: 5, text: 'Workload was heavy but very manageable if you kept up weekly.' },
+    { id: 'f8', stars: 4, text: 'Moves a little fast sometimes, but overall a strong class.' },
+    { id: 'f9', stars: 3, text: 'A solid, unremarkable class. Nothing special, but it got the job done.' },
+  ];
+  const FOCAL_NEG = [
+    { id: 'f10', stars: 2, text: 'Assignment instructions were often vague — had to guess what was expected.' },
+    { id: 'f11', stars: 2, text: 'Grading felt inconsistent; similar answers got very different scores.' },
+    { id: 'f12', stars: 2, text: 'Office hours were frequently canceled without notice.' },
+  ];
+  const NEUTRAL_ALL = [
+    { id: 'n1', stars: 5, text: 'Really breaks down difficult material step by step, easy to follow.' },
+    { id: 'n2', stars: 5, text: 'Lectures were engaging — I looked forward to class most weeks.' },
+    { id: 'n3', stars: 5, text: 'Grading was fair and consistent, rubric matched what was actually taught.' },
+    { id: 'n4', stars: 5, text: 'Responded to emails within a day and office hours were genuinely useful.' },
+    { id: 'n5', stars: 5, text: 'Kept exactly to the syllabus — deadlines never moved around.' },
+    { id: 'n6', stars: 5, text: 'Exams matched the lecture content closely; no surprises.' },
+    { id: 'n7', stars: 5, text: 'A lot of work, but the pacing made it doable if you didn’t fall behind.' },
+    { id: 'n8', stars: 4, text: 'Sometimes covers material quickly, but overall a good class.' },
+    { id: 'n9', stars: 3, text: 'An average class overall — fine, but nothing memorable.' },
+    { id: 'n10', stars: 2, text: 'Instructions for assignments were often unclear, lots of guessing involved.' },
+    { id: 'n11', stars: 2, text: 'Grading seemed inconsistent between similar submissions.' },
+    { id: 'n12', stars: 2, text: 'Office hours were canceled several times without much notice.' },
+  ];
+
+  const posFirst = kit.condition === 'pos_first';
+  const focalReviews = posFirst ? FOCAL_POS.concat(FOCAL_NEG) : FOCAL_NEG.concat(FOCAL_POS);
+  kit.set('focal_order_shown', focalReviews.map(r => r.id));
+
+  const neutralReviews = kit.shuffle(NEUTRAL_ALL);
+  kit.set('neutral_order_shown', neutralReviews.map(r => r.id));
+
+  // Which panel appears first on the page — independent of the order condition above.
+  const focalFirst = kit.random() < 0.5;
+  kit.set('focal_panel_position', focalFirst ? 'first' : 'second');
+
+  const stars = n => '★'.repeat(n) + '☆'.repeat(5 - n);
+  const panel = (label, reviews) => `
+    <div class="prof-panel">
+      <div class="prof-head"><h3>${label}</h3><span class="prof-score">4.0 average · 12 reviews</span></div>
+      ${reviews.map(r => `<div class="review"><span class="stars">${stars(r.stars)}</span><p>${StudyKit.esc(r.text)}</p></div>`).join('')}
+    </div>`;
+
+  const panelsHtml = focalFirst
+    ? panel('Professor A', focalReviews) + panel('Professor B', neutralReviews)
+    : panel('Professor B', neutralReviews) + panel('Professor A', focalReviews);
+
+  await kit.show({
+    title: 'Choosing a section',
+    html: `<p>Imagine you need this course to satisfy a requirement next semester, and it's only offered
+      in two sections — same syllabus, one midterm, one final, weekly homework, class meets twice a
+      week. The only difference is who's teaching it.</p>
+      <p>On the next screen you'll see the CULPA reviews for both professors. Read them, then choose
+      which section you'd enroll in.</p>`,
+    button: 'Show reviews',
+  });
+
+  const choiceAns = await kit.ask({
+    id: 'choice',
+    title: 'Which section would you enroll in?',
+    intro: panelsHtml,
+    questions: [
+      { id: 'choice', type: 'mc', prompt: 'I would enroll in the section taught by:',
+        options: [{ value: 'A', label: 'Professor A' }, { value: 'B', label: 'Professor B' }] },
+    ],
+  });
+  const focalChosen = choiceAns.choice === 'A';
+  kit.set('focal_chosen', focalChosen);
+
+  // Secondary measure: which 3 reviews (from the chosen professor only) mattered most.
+  const chosenReviews = focalChosen ? focalReviews : neutralReviews;
+  const chosenLabel = focalChosen ? 'Professor A' : 'Professor B';
+  await kit.ask({
+    id: 'top_reasons',
+    title: 'What shaped your choice?',
+    intro: `<p class="sk-muted">Pick the 3 reviews of ${StudyKit.esc(chosenLabel)}'s section that most influenced your decision.</p>`,
+    questions: [
+      { id: 'top3', type: 'multi', min: 3, max: 3, prompt: 'Pick exactly 3:', shuffle: true,
+        options: chosenReviews.map(r => ({ value: r.id, label: StudyKit.esc(`${stars(r.stars)}  ${r.text}`) })) },
+    ],
+  });
+
+  kit.finish();
+})();
+</script>
+</body>
+</html>

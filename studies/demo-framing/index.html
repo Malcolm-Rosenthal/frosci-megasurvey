@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Demo: framing</title>
+  <link rel="stylesheet" href="../../lib/study-kit.css">
+</head>
+<body>
+<script src="../../lib/study-kit.js"></script>
+<script>
+/* DEMO — a two-condition, between-subjects study (the gain/loss example from the worksheet).
+   The wrapper assigns the condition; this page just reads kit.condition. */
+(async () => {
+  const kit = await StudyKit.start({ id: 'demo-framing', conditions: ['gain', 'loss'] });
+
+  const scenario = kit.condition === 'gain'
+    ? `<p>You have been given <strong>$0</strong>. You may choose one of the following:</p>`
+    : `<p>You have been given <strong>$100</strong>. You may choose one of the following:</p>`;
+  const options = kit.condition === 'gain'
+    ? [{ value: 'sure', label: 'Receive $50 for certain' }, { value: 'risky', label: 'A 50% chance of receiving $100, and a 50% chance of receiving nothing' }]
+    : [{ value: 'sure', label: 'Lose $50 for certain' },    { value: 'risky', label: 'A 50% chance of losing $100, and a 50% chance of losing nothing' }];
+
+  await kit.ask({
+    id: 'choice',
+    title: 'A choice',
+    intro: scenario,
+    questions: [
+      { id: 'choice', type: 'mc', prompt: 'Which do you choose?', options, shuffle: true },
+      { id: 'confidence', type: 'scale', min: 1, max: 5, prompt: 'How sure are you about that choice?', labels: ['Not at all', 'Completely'] },
+    ],
+  });
+
+  kit.finish();
+})();
+</script>
+</body>
+</html>

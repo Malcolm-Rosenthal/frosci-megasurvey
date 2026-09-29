@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pricing</title>
+  <link rel="stylesheet" href="../../lib/study-kit.css">
+  <style>
+    .sk-price-row { display: flex; align-items: center; gap: .5rem; }
+    .sk-price-row .sk-input { max-width: 8rem; }
+    .sk-dollar { font-weight: 600; }
+  </style>
+</head>
+<body>
+<script src="../../lib/study-kit.js"></script>
+<script>
+/*
+ * Electron Team — Wed 12:10
+ * Question:  Does time pressure affect how accurately people price everyday items?
+ * Design:    Between subjects, 2 conditions (timed / untimed). Same 14 items, same reference
+ *            prices, same page — only the presence of a 60s countdown differs. (Team's original
+ *            in-class design was within-subjects, timed-then-untimed; Mal flagged that as
+ *            order-confounded, so this rebuilds it between-subjects — see queue notes.)
+ * Measures:  price given per item (kept blank if unanswered), % absolute error from a reference
+ *            retail price per item, mean % error across answered items, how many of the 14 they
+ *            got to, and a self-reported "felt rushed" check.
+ *
+ * OPEN ITEM FOR MAL: reference retail prices below are my best-guess current placeholders, not
+ * verified against an actual receipt/site. Please sanity-check/adjust before this is "confirmed"
+ * (flagged as open item #6 in the status doc, matching the "design fix" note already there).
+ */
+(async () => {
+  const kit = await StudyKit.start({ id: 'electron-1210', conditions: ['timed', 'untimed'] });
+
+  // id, on-screen label, reference retail price (USD) used to score accuracy.
+  const ITEMS = [
+    { id: 'diet_coke',      label: 'Diet Coke (20 oz bottle)',                    price: 2.29 },
+    { id: 'macbook_air',    label: 'MacBook Air (13", base model)',               price: 999 },
+    { id: 'dominos_pizza',  label: "Domino's large 3-topping pizza (carryout)",   price: 13.99 },
+    { id: 'starbucks_latte',label: 'Starbucks Grande Latte',                      price: 5.45 },
+    { id: 'colgate',        label: 'Colgate Total toothpaste (4.8 oz tube)',      price: 4.49 },
+    { id: 'nike_shoes',     label: 'Nike running shoes (e.g. Pegasus)',           price: 130 },
+    { id: 'trident_gum',    label: 'Trident pack of gum (14 pieces)',             price: 2.29 },
+    { id: 'airpods',        label: 'Apple AirPods (base model)',                  price: 129 },
+    { id: 'dq_blizzard',    label: 'Small Blizzard (Dairy Queen)',                price: 4.49 },
+    { id: 'notebook',       label: 'Spiral notebook (1-subject)',                 price: 4.99 },
+    { id: 'owala_bottle',   label: 'Owala water bottle (24 oz)',                  price: 34.99 },
+    { id: 'pens_pack',      label: 'Pack of pens (10-count)',                     price: 5.49 },
+    { id: 'cfa_nuggets',    label: 'Chick-fil-A 12-count nuggets',                price: 6.35 },
+    { id: 'backpack',       label: 'JanSport black backpack',                     price: 40 },
+  ];
+  const order = kit.shuffle(ITEMS);
+  kit.set('item_order', order.map(x => x.id));
+
+  const timed = kit.condition === 'timed';
+
+  await kit.show({
+    title: 'Price these items',
+    html: timed
+      ? `<p>On the next screen you'll see a list of 14 everyday items. Type in what you think each one
+          costs in US dollars — your best guess is fine.</p>
+         <p><strong>You'll have 60 seconds.</strong> Get to as many as you can; it's fine to leave some blank
+          if you run out of time.</p>`
+      : `<p>On the next screen you'll see a list of 14 everyday items. Type in what you think each one
+          costs in US dollars — your best guess is fine.</p>
+         <p>Take as long as you'd like.</p>`,
+    button: 'Start',
+  });
+
+  const questions = order.map(it => ({
+    id: 'price_' + it.id,
+    type: 'number',
+    required: false,
+    min: 0,
+    integer: false,
+    prompt: it.label,
+    placeholder: 'e.g. 2.50',
+  }));
+
+  const askOpts = {
+    id: 'pricing',
+    title: 'Price these items',
+    intro: '<p class="sk-muted">Dollars, e.g. 2.50. Leave blank if you\'re really not sure.</p>',
+    questions,
+  };
+  if (timed) askOpts.timeLimitSec = 60;
+  await kit.ask(askOpts);
+
+  // Score accuracy against the reference prices.
+  let nAnswered = 0;
+  let sumPctErr = 0;
+  order.forEach(it => {
+    const v = kit.data['price_' + it.id];
+    if (v == null || Number.isNaN(v)) return;
+    nAnswered++;
+    const pctErr = Math.abs(v - it.price) / it.price * 100;
+    kit.set('pct_err_' + it.id, Math.round(pctErr * 10) / 10);
+  });
+  order.forEach(it => {
+    const e = kit.data['pct_err_' + it.id];
+    if (e != null) sumPctErr += e;
+  });
+  kit.set('n_answered', nAnswered);
+  kit.set('n_total', ITEMS.length);
+  kit.set('completed_all', nAnswered === ITEMS.length);
+  kit.set('mean_pct_err', nAnswered ? Math.round((sumPctErr / nAnswered) * 10) / 10 : null);
+
+  await kit.ask({
+    id: 'manip_check',
+    questions: [
+      { id: 'felt_rushed', type: 'scale', min: 1, max: 5, labels: ['Not at all rushed', 'Extremely rushed'],
+        prompt: 'How rushed did you feel while pricing the items?', optOut: true },
+    ],
+  });
+
+  kit.finish();
+})();
+</script>
+</body>
+</html>

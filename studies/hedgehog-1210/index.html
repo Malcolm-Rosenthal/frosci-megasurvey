@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Found & Lost</title>
+  <link rel="stylesheet" href="../../lib/study-kit.css">
+  <style>
+    .scenario { font-size: 1.05rem; line-height: 1.6; padding: 16px 18px; border: 1px solid var(--border);
+                border-radius: var(--radius); background: var(--surface); margin-bottom: 4px; }
+  </style>
+</head>
+<body>
+<script src="../../lib/study-kit.js"></script>
+<script>
+/*
+ * Hedgehog Team — Wed 12:10
+ * Question:  Do people react more intensely to a loss than to an equivalent gain (the negativity effect /
+ *            loss aversion)?
+ * Design:    Between subjects, redesigned at Mal's request. The team's own doc described two scenarios
+ *            that were NOT matched: the "positive" version was a single event (found $5, kept it), while
+ *            the "negative" version had an extra narrative beat (found $5, kept it, THEN lost it) — so any
+ *            group difference could reflect the extra event rather than valence per se. The team's two
+ *            rating scales were also mismatched: one ran 1(neutral)-10(very negative), the other
+ *            1(neutral)-10(very positive) — two one-directional scales with no shared zero, which all but
+ *            guarantees a "difference" between groups regardless of how anyone actually feels.
+ *            This version keeps the team's premise (a $5 bill, a found/lost story) but makes both
+ *            scenarios genuinely mirror images: both groups end the story at a net $0 (they found a $5
+ *            bill AND lost a $5 bill), differing only in which happened first. Both groups then rate the
+ *            same question on the same single bipolar scale, so a difference — if there is one — reflects
+ *            the order of the gain/loss, not a confound in the story or the instrument.
+ * Measures:  feeling (1-10, single shared bipolar scale, 1 = very negative ... 10 = very positive).
+ *            Primary comparison: found_first vs. lost_first.
+ */
+(async () => {
+  const kit = await StudyKit.start({ id: 'hedgehog-1210', conditions: ['found_first', 'lost_first'] });
+
+  const SCENARIOS = {
+    found_first: `This morning you found a five dollar bill on the sidewalk and kept it. Later, on your
+      way to class, you noticed it had fallen out of your pocket — you no longer have it.`,
+    lost_first: `This morning you realized a five dollar bill had fallen out of your pocket at some point
+      — you'd lost it. Later, on your way to class, you found a five dollar bill on the sidewalk and kept it.`,
+  };
+
+  await kit.ask({
+    id: 'feeling',
+    title: 'A five dollar bill',
+    intro: `<div class="scenario">${SCENARIOS[kit.condition]}</div>`,
+    questions: [
+      {
+        id: 'feeling', type: 'scale', min: 1, max: 10,
+        prompt: 'Thinking about how the day went, how do you feel?',
+        labels: ['Very negative', 'Very positive'],
+      },
+    ],
+  });
+
+  kit.finish();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Demo: word list</title>
+  <link rel="stylesheet" href="../../lib/study-kit.css">
+</head>
+<body>
+<script src="../../lib/study-kit.js"></script>
+<script>
+/* DEMO — timed stimuli + recognition test, randomised inside the study (no wrapper conditions).
+   Uses kit.shuffle (seeded), kit.countdown, kit.sequence, and a timed question page. */
+(async () => {
+  const kit = await StudyKit.start({ id: 'demo-wordlist' });
+
+  const studied = ['banana', 'candle', 'ocean', 'bicycle', 'moon', 'tiger'];
+  const lures = ['apple', 'lamp', 'river', 'scooter', 'sun', 'lion'];
+  const shown = kit.shuffle(studied);
+  kit.set('shown_order', shown);
+
+  await kit.show({
+    title: 'Memory',
+    html: '<p>You’ll see 6 words, one at a time, for one second each. Try to remember them.</p>',
+    button: 'Start',
+  });
+  await kit.countdown({ seconds: 3, label: 'Get ready…' });
+  await kit.sequence(shown, { ms: 1000, gapMs: 150 });
+
+  const ans = await kit.ask({
+    id: 'recognition',
+    title: 'Which words did you see?',
+    timeLimitSec: 30,
+    questions: [
+      { id: 'recognized', type: 'multi', prompt: 'Select every word you saw.', options: studied.concat(lures), shuffle: true, required: false },
+    ],
+  });
+
+  // Derived scores are handy but optional — the raw answers are always saved too.
+  kit.set('hits', ans.recognized.filter(w => studied.includes(w)).length);
+  kit.set('false_alarms', ans.recognized.filter(w => lures.includes(w)).length);
+
+  await kit.ask({
+    id: 'effort',
+    questions: [{ id: 'effort', type: 'slider', min: 0, max: 100, prompt: 'How hard did you try to remember the words?', labels: ['Not at all', 'As hard as I could'] }],
+  });
+
+  kit.finish();
+})();
+</script>
+</body>
+</html>

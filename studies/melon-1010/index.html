@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Penguins</title>
+  <link rel="stylesheet" href="../../lib/study-kit.css">
+  <style>
+    .passage { font-size: 1.05rem; line-height: 1.65; }
+    .countdown-wrap { text-align: center; margin-top: 18px; }
+    .countdown { font-variant-numeric: tabular-nums; font-weight: 700; font-size: 1.3rem; color: var(--accent); }
+    .countdown-label { color: var(--muted); font-size: 0.85rem; margin-top: 2px; }
+    .audio-box { position: relative; text-align: center; padding: 32px 16px; border: 1px solid var(--border);
+                 border-radius: var(--radius); background: var(--surface); margin-bottom: 18px; }
+    .audio-box .tap { display: inline-flex; align-items: center; gap: 10px; padding: 14px 22px; border: 0;
+                       border-radius: 999px; background: var(--accent); color: var(--accent-text); font: inherit;
+                       font-weight: 600; cursor: pointer; }
+    .audio-box .tap[hidden] { display: none; }
+    .audio-box .icon { font-size: 1.4rem; line-height: 1; }
+    .audio-box .playing-hint { color: var(--muted); font-size: 0.9rem; margin-top: 10px; }
+  </style>
+</head>
+<body>
+<script src="../../lib/study-kit.js"></script>
+<script>
+/*
+ * Melon Team — Wed 10:10
+ * Question:  Is information retained better through auditory or visual intake?
+ * Design:    Between subjects, 2 conditions (audio / text). Same 12-fact penguin passage as the
+ *            team's doc, same 12 MC comprehension questions with their answer key. Fixed 1:10
+ *            exposure for BOTH conditions (Mal's call — the team's mp3 runs 1:08, so 1:10 gives a
+ *            couple seconds of buffer either way). Text shows a countdown clock and the passage is
+ *            removed once time's up; audio autoplays once on tap (no pausing/scrubbing — the
+ *            team's design depends on matched exposure time, so letting people pause would break
+ *            that) and the page waits out the full 1:10 even if the clip (1:08) finishes early, so
+ *            both conditions get identical exposure duration. No going back to the source once
+ *            the questions start.
+ * Measures:  12 MC answers (score_total), split into the team's own secondary comparison —
+ *            6 numeric-fact questions (height, speed, species count, dive time, weight, distance)
+ *            vs. 6 general-fact questions (habitat, wing use, warmth, diet, colonies, gland).
+ */
+(async () => {
+  const kit = await StudyKit.start({ id: 'melon-1010', conditions: ['audio', 'text'] });
+  const esc = StudyKit.esc;
+  const EXPOSURE_MS = 70000; // 1:10
+
+  const PASSAGE = 'Penguins are flightless seabirds that are primarily found in the Southern ' +
+    'Hemisphere. The emperor penguin is the largest species of penguin and can reach a height of ' +
+    'about 44 inches. Penguins have a layer of feathers and body fat that helps them stay warm in ' +
+    'cold environments. The fastest penguin species, the gentoo penguin, can swim at speeds of up ' +
+    'to 22 miles per hour. Penguins use their wings as flippers to propel themselves through the ' +
+    'water. There are 18 recognized species of penguins, ranging from the tiny little penguin to ' +
+    'the much larger emperor penguin. Penguins primarily eat fish, squid, and krill, depending on ' +
+    'the species and where they live. Emperor penguins can remain underwater for around 20 minutes ' +
+    'during a dive. Penguins often live and breed in large colonies, which can contain thousands of ' +
+    'individuals. A little penguin typically weighs around 2.2 pounds. Penguins have a special gland ' +
+    'near their eyes that helps remove excess salt from their bodies. Emperor penguins can travel ' +
+    'more than 60 miles from their breeding colonies to reach feeding areas.';
+
+  // Correct answer listed first (options shuffled on screen); "type" feeds the team's numeric-vs-fact split.
+  const QUESTIONS = [
+    { id: 'hemisphere', type: 'fact', prompt: 'Where are penguins primarily found?', options: [
+      'Southern Hemisphere', 'Northern Hemisphere', 'Europe', 'Asia'] },
+    { id: 'height', type: 'numeric', prompt: 'About how tall can an emperor penguin become?', options: [
+      '44 inches', '32 inches', '38 inches', '52 inches'] },
+    { id: 'wings', type: 'fact', prompt: 'What do penguins use their wings for?', options: [
+      'Swimming through the water', 'Flying', 'Protecting their eggs', 'Attracting predators'] },
+    { id: 'speed', type: 'numeric', prompt: 'How fast can gentoo penguins swim?', options: [
+      '22 miles per hour', '12 miles per hour', '18 miles per hour', '30 miles per hour'] },
+    { id: 'warmth', type: 'fact', prompt: 'What helps penguins stay warm in cold environments?', options: [
+      'Their feathers and body fat', 'Their large wings', 'Their long legs', 'Their thick beaks'] },
+    { id: 'species_count', type: 'numeric', prompt: 'How many recognized species of penguins are there?', options: [
+      '18', '12', '15', '24'] },
+    { id: 'diet', type: 'fact', prompt: 'What do penguins primarily eat?', options: [
+      'Fish, squid, and krill', 'Plants and berries', 'Insects and seeds', 'Seals and other birds'] },
+    { id: 'dive_time', type: 'numeric', prompt: 'About how long can emperor penguins remain underwater during a dive?', options: [
+      '20 minutes', '5 minutes', '10 minutes', '35 minutes'] },
+    { id: 'colonies', type: 'fact', prompt: 'How do penguins commonly live and breed?', options: [
+      'In large colonies', 'Alone', 'In pairs only', 'In underground nests'] },
+    { id: 'weight', type: 'numeric', prompt: 'About how much does a little penguin typically weigh?', options: [
+      '2.2 pounds', '1.2 pounds', '4.2 pounds', '6.2 pounds'] },
+    { id: 'gland', type: 'fact', prompt: 'What does the special gland near a penguin’s eyes help it do?', options: [
+      'Remove excess salt from its body', 'See underwater', 'Regulate body temperature', 'Detect predators'] },
+    { id: 'travel_distance', type: 'numeric', prompt: 'How far can emperor penguins travel from their breeding colonies to reach feeding areas?', options: [
+      'More than 60 miles', 'More than 20 miles', 'More than 40 miles', 'More than 100 miles'] },
+  ];
+
+  function fmt(ms) {
+    const s = Math.max(0, Math.ceil(ms / 1000));
+    return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+  }
+
+  await kit.show({
+    title: 'Penguins',
+    html: kit.condition === 'text'
+      ? `<p>On the next screen you'll read a short passage about penguins. You'll have <strong>1
+          minute 10 seconds</strong>, then it'll disappear and you won't be able to go back to it.</p>`
+      : `<p>On the next screen you'll hear a short audio recording about penguins. You'll have
+          <strong>1 minute 10 seconds</strong>, then you won't be able to go back to it.</p>
+         <p>Please turn your sound on.</p>`,
+    button: 'Continue',
+  });
+
+  if (kit.condition === 'text') {
+    const card = kit.stage('');
+    card.className = 'sk-card';
+    card.innerHTML = `<div class="passage">${esc(PASSAGE)}</div>
+      <div class="countdown-wrap"><div class="countdown"></div><div class="countdown-label">time remaining</div></div>
+      <div class="sk-actions"><span class="sk-hint sk-muted">Continue unlocks when the time is up.</span>
+        <button class="sk-btn" type="button" disabled>Continue</button></div>`;
+    const cdEl = card.querySelector('.countdown'), btn = card.querySelector('.sk-btn'), hint = card.querySelector('.sk-hint');
+    kit.mark('text_shown');
+    const t0 = performance.now();
+    await new Promise(resolve => {
+      const tick = () => {
+        const left = EXPOSURE_MS - (performance.now() - t0);
+        cdEl.textContent = fmt(left);
+        if (left <= 0) return resolve();
+        requestAnimationFrame(tick);
+      };
+      tick();
+      setTimeout(resolve, EXPOSURE_MS + 50);
+    });
+    kit.mark('text_time_up');
+    card.querySelector('.passage').outerHTML = '<p class="sk-muted">Time’s up.</p>';
+    cdEl.textContent = '0:00';
+    btn.disabled = false; hint.textContent = '';
+    await new Promise(r => btn.addEventListener('click', r, { once: true }));
+    kit.mark('text_continue');
+  } else {
+    const card = kit.stage('');
+    card.className = 'sk-card';
+    card.innerHTML = `<div class="audio-box">
+        <audio preload="auto" src="media/penguins.mp3"></audio>
+        <button class="tap" type="button"><span class="icon">▶</span><span>Tap to play</span></button>
+        <div class="playing-hint" hidden>Playing…</div>
+      </div>
+      <div class="countdown-wrap"><div class="countdown">${fmt(EXPOSURE_MS)}</div><div class="countdown-label">time remaining</div></div>
+      <div class="sk-actions"><span class="sk-hint sk-muted">Continue unlocks when the time is up.</span>
+        <button class="sk-btn" type="button" disabled>Continue</button></div>`;
+    const audio = card.querySelector('audio'), tap = card.querySelector('.tap'), playingHint = card.querySelector('.playing-hint');
+    const cdEl = card.querySelector('.countdown'), btn = card.querySelector('.sk-btn'), hint = card.querySelector('.sk-hint');
+    let errored = false, endedEarly = false;
+
+    await new Promise(resolveTap => {
+      tap.addEventListener('click', async () => {
+        try { await audio.play(); } catch (e) { errored = true; kit.mark('audio_error'); return resolveTap(); }
+        tap.hidden = true; playingHint.hidden = false;
+        kit.mark('audio_play');
+        resolveTap();
+      }, { once: true });
+      audio.addEventListener('error', () => { errored = true; kit.mark('audio_error'); resolveTap(); }, { once: true });
+    });
+
+    if (!errored) {
+      audio.addEventListener('ended', () => { endedEarly = true; kit.mark('audio_ended'); playingHint.textContent = 'Finished — please wait for the timer.'; }, { once: true });
+      const t0 = performance.now();
+      await new Promise(resolve => {
+        const tick = () => {
+          const left = EXPOSURE_MS - (performance.now() - t0);
+          cdEl.textContent = fmt(left);
+          if (left <= 0) return resolve();
+          requestAnimationFrame(tick);
+        };
+        tick();
+        setTimeout(resolve, EXPOSURE_MS + 50);
+      });
+      if (!audio.paused) audio.pause();
+    }
+    kit.set('audio_completed', !errored);
+    kit.set('audio_error', errored);
+    kit.set('audio_ended_before_cap', endedEarly);
+    kit.mark('audio_time_up');
+    cdEl.textContent = '0:00';
+    btn.disabled = false; hint.textContent = '';
+    await new Promise(r => btn.addEventListener('click', r, { once: true }));
+    kit.mark('audio_continue');
+  }
+
+  const ans = await kit.ask({
+    id: 'questions',
+    title: 'Questions',
+    intro: '<p class="sk-muted">If you’re not sure, take your best guess.</p>',
+    questions: QUESTIONS.map(q => ({
+      id: 'a_' + q.id, type: 'mc', prompt: q.prompt, shuffle: true,
+      options: q.options.map(o => ({ value: o, label: esc(o) })),
+    })),
+  });
+  let numericCorrect = 0, factCorrect = 0;
+  QUESTIONS.forEach(q => {
+    const ok = ans['a_' + q.id] === q.options[0] ? 1 : 0;
+    kit.set('q_' + q.id, ok);
+    if (q.type === 'numeric') numericCorrect += ok; else factCorrect += ok;
+  });
+  kit.set('score_numeric', numericCorrect);
+  kit.set('score_fact', factCorrect);
+  kit.set('score_total', numericCorrect + factCorrect);
+
+  kit.finish();
+})();
+</script>
+</body>
+</html>

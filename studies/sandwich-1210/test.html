@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Memory questions</title>
+  <link rel="stylesheet" href="../../lib/study-kit.css">
+</head>
+<body>
+<script src="content.js"></script>
+<script src="../../lib/study-kit.js"></script>
+<script>
+/*
+ * Sandwich Team — Wed 12:10 — PART B (test). Runs ≥3 parts after view.html and inherits its condition.
+ * 10 multiple-choice questions (one per fact; question order and answer order shuffled), then prior
+ * knowledge and the team's own questions about short-form video habits.
+ * Saved scores: q_<fact> = 1/0 per question, score_total, score_number (5 numeric facts), score_fact (5 other).
+ */
+(async () => {
+  const M = window.MOLASSES;
+  const kit = await StudyKit.start({ id: 'sandwich-1210-test', conditions: ['video', 'text'] });
+  const what = kit.condition === 'video' ? 'watched a short video' : 'read a short list of facts';
+
+  const qs = kit.shuffle(M.questions);
+  kit.set('question_order', qs.map(q => q.fact));
+  const ans = await kit.ask({
+    id: 'quiz',
+    title: 'Remember this?',
+    intro: `<p>Earlier in this survey you ${what} about a historical event. Answer these questions as best you can. If you’re not sure, take your best guess.</p>`,
+    questions: qs.map(q => ({
+      id: 'a_' + q.fact, type: 'mc', prompt: q.prompt, shuffle: true,
+      options: q.options.map(o => ({ value: o, label: StudyKit.esc(o) })),
+    })),
+  });
+
+  const kinds = Object.fromEntries(M.facts.map(f => [f.id, f.kind]));
+  let total = 0, num = 0, fact = 0;
+  M.questions.forEach(q => {
+    const ok = ans['a_' + q.fact] === q.options[0] ? 1 : 0;
+    kit.set('q_' + q.fact, ok);
+    total += ok;
+    if (kinds[q.fact] === 'number') num += ok; else fact += ok;
+  });
+  kit.set('score_total', total);
+  kit.set('score_number', num);
+  kit.set('score_fact', fact);
+
+  await kit.ask({
+    id: 'background',
+    questions: [
+      { id: 'prior_knowledge', type: 'mc', prompt: 'Before today, had you heard of the Great Molasses Flood?',
+        options: [{ value: 'knew_details', label: 'Yes, and I knew some details' }, { value: 'heard_of', label: 'I had heard of it' }, { value: 'no', label: 'No' }] },
+      { id: 'shortform_hours', type: 'slider', min: 0, max: 12, step: 0.5, suffix: ' h',
+        prompt: 'On an average day, about how many hours do you spend watching short-form videos (TikTok, Reels, Shorts, etc.)?',
+        labels: ['0', '12 or more'] },
+      { id: 'shortform_platforms', type: 'multi', prompt: 'Which do you use most for short-form videos? Select all that apply.',
+        options: ['TikTok', 'Instagram Reels', 'YouTube Shorts', 'Other', 'None'] },
+    ],
+  });
+
+  kit.finish();
+})();
+</script>
+</body>
+</html>

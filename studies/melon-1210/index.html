@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Free Response</title>
+  <link rel="stylesheet" href="../../lib/study-kit.css">
+</head>
+<body>
+<script src="../../lib/study-kit.js"></script>
+<script>
+/*
+ * Melon Team — Wed 12:10
+ * Question:  Do people write longer answers to open-ended survey questions on a computer
+ *            than on a phone?
+ * Design:    Between-subjects on device type (phone vs. computer) — NOT randomly assigned;
+ *            this is the participant's actual device, detected client-side (user-agent regex
+ *            + coarse-pointer/no-hover media query + viewport size as a fallback/cross-check).
+ *            Within-subjects: every participant answers all three of the team's open-ended
+ *            prompts. The team's own doc said order "does not matter, but should be identical
+ *            for all participants" — per Mal's call, we instead show the three prompts in a
+ *            per-participant random order, which lets the data also speak to order-of-appearance
+ *            effects (position in the block) as a secondary question, at no extra participant cost.
+ * Measures:  Word count per prompt (wc_morning_routine, wc_perfect_meal, wc_free_time) and
+ *            wc_total (primary DV per the team's design — device-type comparison). prompt_order
+ *            records the shown order for the secondary order-effect analysis. Raw device-detection
+ *            signals are also recorded for a manipulation check.
+ */
+(async () => {
+  const kit = await StudyKit.start({ id: 'melon-1210', conditions: ['phone', 'computer'] });
+
+  // ---- device detection (this is what actually decides the condition in a real run) ----
+  const ua = navigator.userAgent || '';
+  const uaMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(ua);
+  const coarsePointer = !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
+  const noHover = !!(window.matchMedia && window.matchMedia('(hover: none)').matches);
+  const narrowViewport = Math.min(window.innerWidth, window.innerHeight) <= 600;
+  const detectedDevice = (uaMobile || (coarsePointer && noHover && narrowViewport)) ? 'phone' : 'computer';
+
+  kit.set('ua_mobile', uaMobile);
+  kit.set('pointer_coarse', coarsePointer);
+  kit.set('hover_none', noHover);
+  kit.set('viewport_w', window.innerWidth);
+  kit.set('viewport_h', window.innerHeight);
+  kit.set('detected_device', detectedDevice);
+
+  // Standalone/test mode keeps whatever ?cond= (or random) StudyKit assigned, so the yellow
+  // test bar can still force a condition for dev testing. In a real run (inside the wrapper),
+  // the actual detected device is authoritative.
+  if (!kit.standalone) kit.condition = detectedDevice;
+  kit.set('condition_source', kit.standalone ? 'test-override' : 'detected');
+  kit.mark('device_detected', { device: kit.condition });
+
+  const PROMPTS = [
+    { id: 'morning_routine', prompt: 'Tell us about your morning routine.' },
+    { id: 'perfect_meal', prompt: 'Describe your perfect meal.' },
+    { id: 'free_time', prompt: 'How do you like to spend your time when you are completely free?' },
+  ];
+  const ordered = kit.shuffle(PROMPTS);
+  kit.set('prompt_order', ordered.map(p => p.id));
+
+  await kit.show({
+    title: 'A few questions',
+    html: `<p>Next you'll be asked three short open-ended questions. Answer in your own words —
+            there's no right or wrong length, just say what comes to mind.</p>`,
+    button: 'Continue',
+  });
+
+  const ans = await kit.ask({
+    id: 'responses',
+    title: 'In your own words',
+    questions: ordered.map(p => ({
+      id: 'r_' + p.id, type: 'textarea', prompt: p.prompt, required: true, rows: 5,
+    })),
+  });
+
+  function wordCount(s) {
+    const t = String(s || '').trim();
+    return t ? t.split(/\s+/).length : 0;
+  }
+  let total = 0;
+  PROMPTS.forEach(p => {
+    const wc = wordCount(ans['r_' + p.id]);
+    kit.set('wc_' + p.id, wc);
+    total += wc;
+  });
+  kit.set('wc_total', total);
+
+  kit.finish();
+})();
+</script>
+</body>
+</html>

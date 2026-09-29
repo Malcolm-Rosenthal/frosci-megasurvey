@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Short video / facts</title>
+  <link rel="stylesheet" href="../../lib/study-kit.css">
+  <style>
+    .reel { position: relative; margin: 0 auto; width: min(100%, calc(72vh * 9 / 16)); aspect-ratio: 9 / 16;
+            background: #000; border-radius: 14px; overflow: hidden; }
+    .reel video { width: 100%; height: 100%; object-fit: contain; display: block; background: #000; }
+    .reel .tap { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; flex-direction: column;
+                 gap: 10px; color: #fff; background: rgba(0,0,0,.45); border: 0; font: inherit; font-weight: 600; cursor: pointer; }
+    .reel .tap .icon { font-size: 3rem; line-height: 1; }
+    .reel .tap[hidden] { display: none; }
+    .timebar { height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; margin-top: 12px; }
+    .timebar > div { height: 100%; width: 0; background: var(--accent); }
+    .facts { margin: 0; padding-left: 1.4em; }
+    .facts li { margin: 0 0 10px; }
+  </style>
+</head>
+<body>
+<script src="content.js"></script>
+<script src="../../lib/study-kit.js"></script>
+<script>
+/*
+ * Sandwich Team — Wed 12:10 — PART A (viewing). Part B (test.html) comes ≥3 parts later.
+ * Question:  Do people remember information less well after getting it as an AI-made short-form video
+ *            ("reel") than after reading it as plain text?
+ * Design:    Between subjects. VIDEO = ~50 s reel (voiceover + visuals + captions) of the Great Molasses Flood.
+ *            TEXT = the same 10 facts as a plain list, on screen for exactly the video's length.
+ *            Participants aren't told there will be a test.
+ * Logged:    play start/end, pauses, whether the video was muted, time spent in another tab, video errors.
+ */
+(async () => {
+  const M = window.MOLASSES;
+  const kit = await StudyKit.start({ id: 'sandwich-1210-view', conditions: ['video', 'text'] });
+  const esc = StudyKit.esc;
+
+  // Track time spent with the page hidden (switched tabs/apps) during exposure.
+  let hiddenMs = 0, hiddenAt = null, tracking = false;
+  document.addEventListener('visibilitychange', () => {
+    if (!tracking) return;
+    if (document.hidden) hiddenAt = performance.now();
+    else if (hiddenAt != null) { hiddenMs += performance.now() - hiddenAt; hiddenAt = null; }
+  });
+  const stopTracking = () => { if (hiddenAt != null) hiddenMs += performance.now() - hiddenAt; tracking = false; kit.set('hidden_ms', Math.round(hiddenMs)); };
+
+  // Exposure length = the real video's duration when we can read it, so the two conditions always match.
+  const duration = await new Promise(res => {
+    const v = document.createElement('video');
+    v.preload = 'metadata'; v.muted = true; v.src = M.videoFile;
+    const done = d => { v.removeAttribute('src'); res(d); };
+    v.onloadedmetadata = () => done(isFinite(v.duration) && v.duration > 5 ? v.duration : M.exposureSeconds);
+    v.onerror = () => done(M.exposureSeconds);
+    setTimeout(() => done(M.exposureSeconds), 4000);
+  });
+  kit.set('exposure_s', Math.round(duration * 10) / 10);
+
+  if (kit.condition === 'video') {
+    await kit.show({
+      title: 'A short video',
+      html: `<p>On the next screen you’ll watch a short video (under a minute), the kind you might come across on social media.</p>
+             <p>Watch it the way you normally would. <strong>Please turn your sound on</strong> if you can.</p>`,
+      button: 'Go to video',
+    });
+    const card = kit.stage('');
+    card.className = 'sk-card';
+    card.innerHTML = `<div class="reel"><video playsinline preload="auto" src="${esc(M.videoFile)}"></video>
+        <button class="tap" type="button"><span class="icon">▶</span><span>Tap to play</span></button></div>
+      <div class="timebar"><div></div></div>
+      <div class="sk-actions"><span class="sk-hint sk-muted"></span><button class="sk-btn" type="button" disabled>Continue</button></div>`;
+    const video = card.querySelector('video'), tap = card.querySelector('.tap'), btn = card.querySelector('.sk-btn');
+    const bar = card.querySelector('.timebar > div'), hint = card.querySelector('.sk-hint');
+    let pauses = 0, pausedMs = 0, pausedAt = null, started = false, mutedAtStart = null, errored = false;
+    hint.textContent = 'Continue unlocks when the video ends.';
+
+    const togglePlay = async () => {
+      if (video.paused) {
+        try { await video.play(); } catch (e) { hint.textContent = 'Tap the video to play.'; return; }
+        tap.hidden = true;
+        if (!started) { started = true; tracking = true; mutedAtStart = video.muted; kit.mark('video_play'); }
+        if (pausedAt != null) { pausedMs += performance.now() - pausedAt; pausedAt = null; }
+      } else {
+        video.pause(); pauses++; pausedAt = performance.now(); kit.mark('video_pause');
+        tap.hidden = false; tap.querySelector('span:last-child').textContent = 'Paused — tap to resume';
+      }
+    };
+    tap.addEventListener('click', togglePlay);
+    video.addEventListener('click', togglePlay);
+    video.addEventListener('timeupdate', () => { if (video.duration) bar.style.width = (100 * video.currentTime / video.duration) + '%'; });
+
+    await new Promise(resolve => {
+      video.addEventListener('ended', () => { kit.mark('video_ended'); bar.style.width = '100%'; resolve(); }, { once: true });
+      video.addEventListener('error', () => {
+        errored = true; kit.mark('video_error');
+        hint.textContent = 'The video could not be played. Please continue.';
+        resolve();
+      }, { once: true });
+    });
+    stopTracking();
+    kit.set('video_started', started);
+    kit.set('video_completed', !errored);
+    kit.set('video_error', errored);
+    kit.set('video_pauses', pauses);
+    kit.set('video_paused_ms', Math.round(pausedMs));
+    kit.set('video_muted_start', mutedAtStart);
+    kit.set('video_muted_end', video.muted);
+    kit.set('video_volume_end', video.volume);
+    btn.disabled = false; hint.textContent = '';
+    await new Promise(r => btn.addEventListener('click', r, { once: true }));
+
+    await kit.ask({
+      id: 'sound',
+      questions: [{ id: 'sound_on', type: 'mc', prompt: 'Did you watch the video with the sound on?',
+                    options: [{ value: 'yes', label: 'Yes' }, { value: 'partly', label: 'Part of the time' }, { value: 'no', label: 'No' }] }],
+    });
+  } else {
+    await kit.show({
+      title: 'A short read',
+      html: `<p>On the next screen you’ll read a short list of facts. It will stay on screen for under a minute.</p>
+             <p>Read it the way you normally would.</p>`,
+      button: 'Go to facts',
+    });
+    const card = kit.stage('');
+    card.className = 'sk-card';
+    card.innerHTML = `<h2>The Great Molasses Flood</h2>
+      <ol class="facts">${M.facts.map(f => `<li>${esc(f.text)}</li>`).join('')}</ol>
+      <div class="timebar"><div></div></div>
+      <div class="sk-actions"><span class="sk-hint sk-muted">Continue unlocks when the time is up.</span><button class="sk-btn" type="button" disabled>Continue</button></div>`;
+    const btn = card.querySelector('.sk-btn'), bar = card.querySelector('.timebar > div'), hint = card.querySelector('.sk-hint');
+    tracking = true; kit.mark('text_shown');
+    const t0 = performance.now(), total = duration * 1000;
+    await new Promise(resolve => {
+      const tick = () => {
+        const f = Math.min(1, (performance.now() - t0) / total);
+        bar.style.width = (100 * f) + '%';
+        if (f >= 1) return resolve();
+        requestAnimationFrame(tick);
+      };
+      tick();
+      setTimeout(resolve, total + 50);   // in case animation frames are throttled in a background tab
+    });
+    kit.mark('text_time_up');
+    // Hide the list so reading time matches the video exactly.
+    card.querySelector('.facts').outerHTML = '<p class="sk-muted">Time’s up.</p>';
+    stopTracking();
+    btn.disabled = false; hint.textContent = '';
+    await new Promise(r => btn.addEventListener('click', r, { once: true }));
+    kit.mark('text_continue');
+  }
+
+  kit.finish();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>STUDY NAME</title>
+  <link rel="stylesheet" href="../../lib/study-kit.css">
+</head>
+<body>
+<script src="../../lib/study-kit.js"></script>
+<script>
+/*
+ * TEMPLATE — copy this folder to studies/<new-id>/ and add the study to config.js.
+ *
+ * Team:       ______   Section: ______
+ * Question:   ______
+ * Design:     ______   (conditions, what's randomised, what's measured)
+ *
+ * Toolkit cheat-sheet (see lib/study-kit.js for details):
+ *   kit.condition                  condition assigned by the wrapper (or chosen in test mode)
+ *   kit.shuffle(arr) / kit.pick(arr) / kit.random()   seeded randomness (reproducible from saved seed)
+ *   await kit.show({ title, html, button, minMs })    information page
+ *   await kit.ask({ id, title, intro, questions, timeLimitSec })  question page → answers
+ *       types: mc, multi, text, textarea, number, scale, slider
+ *   await kit.countdown({ seconds, label }) / kit.sequence(items, { ms, gapMs, render }) / kit.wait(ms)
+ *   kit.stage(html)                bare full-height stage for custom stimuli; returns the element
+ *   kit.set(key, value)            save any extra value;  kit.mark(name)  timestamped event
+ *   kit.finish()                   ALWAYS call last — saves and moves the participant on
+ */
+(async () => {
+  const kit = await StudyKit.start({ id: 'CHANGE-ME', conditions: ['A', 'B'] });
+
+  await kit.show({ title: 'Instructions', html: '<p>…</p>' });
+
+  await kit.ask({
+    id: 'main',
+    questions: [
+      { id: 'q1', type: 'scale', min: 1, max: 5, prompt: '…', labels: ['low', 'high'] },
+    ],
+  });
+
+  kit.finish();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Listen and recall</title>
+  <link rel="stylesheet" href="../../lib/study-kit.css">
+  <style>
+    .audio-box { position: relative; text-align: center; padding: 32px 16px; border: 1px solid var(--border);
+                 border-radius: var(--radius); background: var(--surface); }
+    .audio-box .tap { display: inline-flex; align-items: center; gap: 10px; padding: 14px 22px; border: 0;
+                       border-radius: 999px; background: var(--accent); color: var(--accent-text); font: inherit;
+                       font-weight: 600; cursor: pointer; }
+    .audio-box .tap[hidden] { display: none; }
+    .audio-box .icon { font-size: 1.4rem; line-height: 1; }
+    .timebar { height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; margin-top: 18px; }
+    .timebar > div { height: 100%; width: 0; background: var(--accent); }
+    .load-wrap { text-align: center; padding: 20px 0; }
+    .load-label { color: var(--muted); font-size: 0.95rem; margin-bottom: 10px; }
+  </style>
+</head>
+<body>
+<script src="../../lib/study-kit.js"></script>
+<script>
+/*
+ * Asteroid Team — Wed 10:10
+ * Question:  Does a longer delay between hearing a list and recalling it hurt ordered recall,
+ *            and does that interact with list length?
+ * Design:    Between subjects, 2×2 (5 vs 10 countries) × (2 s vs 30 s delay) — 4 conditions.
+ *            Audio recorded by Mal's students (media/countries-5.mp3, countries-10.mp3), listened
+ *            to once (tap to play, can pause — pauses logged). Delay is filled with a fake
+ *            "loading" bar rather than a bare countdown: 2 s fills smoothly; 30 s fills in uneven
+ *            bursts with short freezes (protocol change from the team's original 45 s — Mal's
+ *            call, flagged in the status doc — nothing here longer than ~2 s so it doesn't read
+ *            as broken). Free-recall textarea, one item per line, in the order remembered.
+ * Measures:  n items recalled (regardless of order), n in exact serial position, and the main DV —
+ *            longest common subsequence with the true order (order-preserving correct count).
+ */
+(async () => {
+  const kit = await StudyKit.start({ id: 'asteroid-1010', conditions: ['5-2s', '5-30s', '10-2s', '10-30s'] });
+
+  const TRUE_LISTS = {
+    5: ['Latvia', 'Lithuania', 'Sri Lanka', 'Georgia', 'Republic of Ireland'],
+    10: ['Latvia', 'Lithuania', 'Sri Lanka', 'Georgia', 'Republic of Ireland',
+         'Panama', 'United Arab Emirates', 'Austria', 'Azerbaijan', 'Serbia'],
+  };
+  const [countStr, delayStr] = kit.condition.split('-');
+  const n = Number(countStr);
+  const delaySec = Number(delayStr.replace('s', ''));
+  const trueList = TRUE_LISTS[n];
+  const audioFile = n === 5 ? 'media/countries-5.mp3' : 'media/countries-10.mp3';
+
+  await kit.show({
+    title: 'Listen and recall',
+    html: `<p>On the next screen you'll hear a short audio clip listing ${n} country names, in order.
+      Listen carefully and try to remember them, in the order they're said.</p>
+      <p>Afterward there'll be a short wait, then you'll be asked to type back what you remember.</p>`,
+    button: 'Start',
+  });
+
+  // ---- Audio playback ----
+  const audioCard = kit.stage('');
+  audioCard.className = 'sk-card';
+  audioCard.innerHTML = `<div class="audio-box">
+      <audio preload="auto" src="${StudyKit.esc(audioFile)}"></audio>
+      <button class="tap" type="button"><span class="icon">▶</span><span>Tap to play</span></button>
+      <div class="timebar"><div></div></div>
+    </div>`;
+  const audio = audioCard.querySelector('audio');
+  const tap = audioCard.querySelector('.tap');
+  const bar = audioCard.querySelector('.timebar > div');
+  let pauses = 0, started = false, errored = false;
+
+  const togglePlay = async () => {
+    if (audio.paused) {
+      try { await audio.play(); } catch (e) { return; }
+      tap.hidden = true;
+      if (!started) { started = true; kit.mark('audio_play'); }
+      else kit.mark('audio_resume');
+    } else {
+      audio.pause(); pauses++; kit.mark('audio_pause');
+      tap.hidden = false; tap.querySelector('span:last-child').textContent = 'Paused — tap to resume';
+    }
+  };
+  tap.addEventListener('click', togglePlay);
+  audio.addEventListener('timeupdate', () => { if (audio.duration) bar.style.width = (100 * audio.currentTime / audio.duration) + '%'; });
+
+  await new Promise(resolve => {
+    audio.addEventListener('ended', () => { kit.mark('audio_ended'); bar.style.width = '100%'; resolve(); }, { once: true });
+    audio.addEventListener('error', () => { errored = true; kit.mark('audio_error'); resolve(); }, { once: true });
+  });
+  kit.set('audio_started', started);
+  kit.set('audio_completed', !errored);
+  kit.set('audio_error', errored);
+  kit.set('audio_pauses', pauses);
+
+  // ---- Delay, filled with a fake loading bar ----
+  // Builds a schedule of alternating fill/freeze segments (seeded, so it's reproducible from the
+  // saved seed) whose durations always sum to exactly delaySec. 2 s = one smooth fill, no freezes.
+  function buildSchedule(totalMs, jittery) {
+    if (!jittery) return [{ ms: totalMs, deltaPct: 100 }];
+    const nFill = 8, nFreeze = nFill - 1;
+    const fillShare = 0.7, freezeShare = 0.3;
+    const fillWeights = Array.from({ length: nFill }, () => 0.4 + kit.random());
+    const freezeWeights = Array.from({ length: nFreeze }, () => 0.4 + kit.random());
+    const fillWSum = fillWeights.reduce((a, b) => a + b, 0);
+    const freezeWSum = freezeWeights.reduce((a, b) => a + b, 0) || 1;
+    const segs = [];
+    for (let i = 0; i < nFill; i++) {
+      segs.push({ ms: Math.round(totalMs * fillShare * fillWeights[i] / fillWSum), deltaPct: 100 * fillWeights[i] / fillWSum });
+      if (i < nFreeze) segs.push({ ms: Math.round(totalMs * freezeShare * freezeWeights[i] / freezeWSum), deltaPct: 0 });
+    }
+    // Rounding fixup so the animated duration matches the real delay exactly.
+    const drift = totalMs - segs.reduce((a, s) => a + s.ms, 0);
+    segs[segs.length - 1].ms += drift;
+    return segs;
+  }
+
+  async function runBar(barEl, segments) {
+    let pct = 0;
+    for (const seg of segments) {
+      const startPct = pct, endPct = Math.min(100, pct + seg.deltaPct);
+      const t0 = performance.now();
+      await new Promise(resolve => {
+        (function tick() {
+          const f = seg.ms > 0 ? Math.min(1, (performance.now() - t0) / seg.ms) : 1;
+          barEl.style.width = (startPct + f * (endPct - startPct)) + '%';
+          if (f >= 1) return resolve();
+          requestAnimationFrame(tick);
+        })();
+      });
+      pct = endPct;
+    }
+    barEl.style.width = '100%';
+  }
+
+  const loadCard = kit.stage('');
+  loadCard.className = 'sk-card';
+  loadCard.innerHTML = `<div class="load-wrap"><div class="load-label">Loading next part…</div>
+      <div class="timebar"><div></div></div></div>`;
+  const loadBar = loadCard.querySelector('.timebar > div');
+  kit.mark('delay_start');
+  const t0 = performance.now();
+  await runBar(loadBar, buildSchedule(delaySec * 1000, delaySec > 2));
+  kit.set('delay_actual_ms', Math.round(performance.now() - t0));
+  kit.mark('delay_end');
+
+  // ---- Free recall ----
+  const ans = await kit.ask({
+    id: 'recall',
+    title: 'What do you remember?',
+    intro: `<p class="sk-muted">Type the countries you remember, one per line, in the order you remember
+      them being said. It's fine if you don't remember all of them, or aren't sure of the order.</p>`,
+    questions: [
+      { id: 'recalled_raw', type: 'textarea', required: false, placeholder: 'One country per line…' },
+    ],
+  });
+
+  // ---- Score against the true order ----
+  const norm = s => s.trim().toLowerCase().replace(/\s+/g, ' ');
+  const trueNorm = trueList.map(norm);
+  const typed = (ans.recalled_raw || '')
+    .split(/[\n,]/).map(s => s.trim()).filter(Boolean);
+  const typedNorm = typed.map(norm);
+
+  const nCorrectAnyPos = typedNorm.filter(t => trueNorm.includes(t)).length;
+  let nCorrectSerial = 0;
+  for (let i = 0; i < Math.min(typedNorm.length, trueNorm.length); i++) {
+    if (typedNorm[i] === trueNorm[i]) nCorrectSerial++;
+  }
+  // Longest common subsequence (order-preserving correct count) — the main DV.
+  const A = trueNorm, B = typedNorm;
+  const dp = Array.from({ length: A.length + 1 }, () => new Array(B.length + 1).fill(0));
+  for (let i = 1; i <= A.length; i++) {
+    for (let j = 1; j <= B.length; j++) {
+      dp[i][j] = A[i - 1] === B[j - 1] ? dp[i - 1][j - 1] + 1 : Math.max(dp[i - 1][j], dp[i][j - 1]);
+    }
+  }
+  const lcsLen = dp[A.length][B.length];
+
+  kit.set('n_countries', n);
+  kit.set('delay_sec', delaySec);
+  kit.set('n_typed', typed.length);
+  kit.set('n_correct_any_position', nCorrectAnyPos);
+  kit.set('n_correct_serial_position', nCorrectSerial);
+  kit.set('lcs_ordered_correct', lcsLen);
+  kit.set('typed_list', typed);
+
+  kit.finish();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Word memory</title>
+  <link rel="stylesheet" href="../../lib/study-kit.css">
+  <style>
+    .word { font-size: clamp(2.2rem, 10vw, 3.6rem); font-weight: 700; letter-spacing: .01em; }
+    .word.salient { color: #e03131; }
+    .trial { text-align: center; }
+    .trial .word { margin: 8vh 0 6vh; }
+    .yn { display: flex; gap: 12px; justify-content: center; }
+    .yn .sk-btn { flex: 1 1 0; max-width: 220px; min-height: 60px; font-size: 1.05rem; }
+    .trial .count { color: var(--muted); font-size: .9rem; }
+    .keys { color: var(--muted); font-size: .85rem; margin-top: 14px; }
+    @media (pointer: coarse) { .keys { display: none; } }
+  </style>
+</head>
+<body>
+<script src="../../lib/study-kit.js"></script>
+<script>
+/*
+ * Sandwich Team — Wed 10:10 (redesigned with Mal; the image component was dropped)
+ * Question:  Does making a word visually salient (colour) improve memory for it, and does it change false
+ *            memories for related words that were never shown?
+ * Design:    Within subjects. Study list = 8 themes × 4 words (classic false-memory "DRM" lists; each theme
+ *            points to an unshown LURE word). Shown one at a time, 1 s each, random order. In 4 randomly chosen
+ *            themes, one randomly chosen word is shown in RED (4 of 32). Short arithmetic filler, then a
+ *            recognition test of 32 words: 16 old (2 per theme, always including every red word) +
+ *            16 new (the 8 lures + 8 unrelated words), random order, "On the list" / "Not on the list".
+ * Outcomes:  hits and false alarms by word type: red words vs plain words; lures from themes that had a red
+ *            word vs lures from all-plain themes; unrelated new words as the baseline. Per-trial answer + RT saved.
+ */
+(async () => {
+  const kit = await StudyKit.start({ id: 'sandwich-1010' });
+  const esc = StudyKit.esc;
+
+  const THEMES = [
+    { lure: 'sleep',    words: ['bed', 'rest', 'tired', 'dream'] },
+    { lure: 'chair',    words: ['table', 'sit', 'seat', 'couch'] },
+    { lure: 'sweet',    words: ['candy', 'sugar', 'sour', 'honey'] },
+    { lure: 'doctor',   words: ['nurse', 'sick', 'medicine', 'hospital'] },
+    { lure: 'cold',     words: ['hot', 'snow', 'winter', 'ice'] },
+    { lure: 'mountain', words: ['hill', 'valley', 'climb', 'peak'] },
+    { lure: 'window',   words: ['door', 'glass', 'pane', 'curtain'] },
+    { lure: 'music',    words: ['note', 'piano', 'sing', 'melody'] },
+  ];
+  const FOILS = ['pencil', 'garden', 'rabbit', 'button', 'wallet', 'planet', 'basket', 'engine'];
+  const WORD_MS = 1000, GAP_MS = 250;
+
+  // ----- per-participant randomisation -----
+  const salientThemes = new Set(kit.shuffle(THEMES.map((t, i) => i)).slice(0, 4));
+  const study = [];                       // { word, theme, salient }
+  const tested = [];                      // test items
+  THEMES.forEach((t, ti) => {
+    const ws = kit.shuffle(t.words);      // ws[0] = coloured (if salient theme); ws[0..1] = tested
+    ws.forEach((w, k) => study.push({ word: w, theme: t.lure, salient: salientThemes.has(ti) && k === 0 }));
+    const sal = salientThemes.has(ti);
+    tested.push({ word: ws[0], theme: t.lure, type: sal ? 'old_red' : 'old_plain_theme' });
+    tested.push({ word: ws[1], theme: t.lure, type: sal ? 'old_plain_in_red_theme' : 'old_plain_theme' });
+    tested.push({ word: t.lure, theme: t.lure, type: sal ? 'lure_red_theme' : 'lure_plain_theme' });
+  });
+  FOILS.forEach(w => tested.push({ word: w, theme: null, type: 'new_unrelated' }));
+  const studyOrder = kit.shuffle(study);
+  const testOrder = kit.shuffle(tested);
+  kit.set('red_words', study.filter(s => s.salient).map(s => s.word));
+  kit.set('study_order', studyOrder.map(s => s.word));
+
+  // ----- instructions + study phase -----
+  await kit.show({
+    title: 'Word memory',
+    html: `<p>You’re about to see a list of <strong>32 words</strong>, one at a time, each for about a second.</p>
+           <p><strong>Try to memorize as many as you can.</strong> Afterwards we’ll test your memory.</p>`,
+    button: 'Start',
+  });
+  await kit.countdown({ seconds: 3, label: 'Get ready…' });
+  kit.mark('study_start');
+  await kit.sequence(studyOrder, {
+    ms: WORD_MS, gapMs: GAP_MS,
+    render: s => `<div class="word${s.salient ? ' salient' : ''}">${esc(s.word)}</div>`,
+  });
+  kit.mark('study_end');
+
+  // ----- short filler so the last few words aren't just sitting in short-term memory -----
+  const sums = [0, 1, 2].map(() => { const a = 11 + Math.floor(kit.random() * 40), b = 11 + Math.floor(kit.random() * 40); return { a, b }; });
+  const filler = await kit.ask({
+    id: 'filler',
+    title: 'Quick math',
+    intro: '<p class="sk-muted">Before the memory test, please solve these.</p>',
+    questions: sums.map((s, i) => ({ id: 'math' + (i + 1), type: 'number', prompt: `${s.a} + ${s.b} = ?` })),
+  });
+  kit.set('math_correct', sums.filter((s, i) => filler['math' + (i + 1)] === s.a + s.b).length);
+
+  // ----- recognition test -----
+  await kit.show({
+    title: 'Memory test',
+    html: `<p>You’ll now see 32 words, one at a time. For each one, say whether it was <strong>on the list</strong> you just saw.</p>
+           <p class="sk-muted">Some were on the list and some weren’t. Go with your first instinct.</p>`,
+    button: 'Begin test',
+  });
+
+  const trials = [];
+  const root = kit.stage('');
+  root.className = 'sk-card trial';
+  for (let i = 0; i < testOrder.length; i++) {
+    const it = testOrder[i];
+    root.innerHTML = `<div class="count">${i + 1} / ${testOrder.length}</div>
+      <div class="word">${esc(it.word)}</div>
+      <div class="yn"><button class="sk-btn" type="button" data-a="yes">On the list</button>
+                      <button class="sk-btn sk-secondary" type="button" data-a="no">Not on the list</button></div>
+      <div class="keys">Keyboard: ← on the list · → not on the list</div>`;
+    const t0 = performance.now();
+    const answer = await new Promise(resolve => {
+      const done = a => { document.removeEventListener('keydown', onKey); resolve(a); };
+      const onKey = e => { if (e.key === 'ArrowLeft') done('yes'); else if (e.key === 'ArrowRight') done('no'); };
+      document.addEventListener('keydown', onKey);
+      root.querySelectorAll('[data-a]').forEach(b => b.addEventListener('click', () => done(b.dataset.a), { once: true }));
+    });
+    trials.push({ word: it.word, type: it.type, theme: it.theme, said_old: answer === 'yes', rt_ms: Math.round(performance.now() - t0) });
+    root.innerHTML = '';
+    await kit.wait(200);
+  }
+  kit.set('trials', trials);
+
+  // ----- summary scores: how many of each word type got "on the list" -----
+  // (out of: old_red 4, old_plain_in_red_theme 4, old_plain_theme 8, lure_red_theme 4, lure_plain_theme 4, new_unrelated 8)
+  const types = ['old_red', 'old_plain_in_red_theme', 'old_plain_theme', 'lure_red_theme', 'lure_plain_theme', 'new_unrelated'];
+  types.forEach(ty => {
+    const ts = trials.filter(t => t.type === ty);
+    kit.set('yes_' + ty, ts.filter(t => t.said_old).length);
+  });
+  const old = trials.filter(t => t.type.startsWith('old'));
+  const neu = trials.filter(t => !t.type.startsWith('old'));
+  kit.set('hits', old.filter(t => t.said_old).length);
+  kit.set('false_alarms', neu.filter(t => t.said_old).length);
+
+  await kit.ask({
+    id: 'after',
+    questions: [
+      { id: 'noticed_red', type: 'mc', prompt: 'Did you notice anything different about some of the words in the list?',
+        options: [{ value: 'red', label: 'Yes, some were in a different color' }, { value: 'other', label: 'Yes, something else' }, { value: 'no', label: 'No' }] },
+    ],
+  });
+
+  kit.finish();
+})();
+</script>
+</body>
+</html>

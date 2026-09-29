@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Reading</title>
+  <link rel="stylesheet" href="../../lib/study-kit.css">
+  <style>
+    .passage { font-size: 1.05rem; line-height: 1.65; }
+  </style>
+</head>
+<body>
+<script src="../../lib/study-kit.js"></script>
+<script>
+/*
+ * Electron Team — Wed 10:10
+ * Question:  Does the style a text is written in (serious / fun / "brainrot") affect how well readers understand it?
+ * Design:    Between subjects, 3 conditions. ONE passage (College Board SAT item on Tetragnatha silk,
+ *            Alicea-Serrano et al.) in three styles. Every version carries the same 9 pieces of information
+ *            and is about the same length in characters (725 / 730 / 730). Questions are identical for everyone,
+ *            asked in plain standard English, with the passage no longer on screen.
+ * Measures:  reading time; 1 main-idea question (the original SAT item) + 4 detail questions;
+ *            ease/interest ratings; familiarity with internet slang (possible moderator).
+ */
+(async () => {
+  const kit = await StudyKit.start({ id: 'electron-1010', conditions: ['serious', 'fun', 'brainrot'] });
+
+  // Information units every version must contain:
+  // 1 Tetragnatha = genus of orb-weaving spiders · 2 adaptive radiation diversified web architecture ·
+  // 3 over a short timescale · 4 question: was silk similarly affected? · 5 Alicea-Serrano et al. ·
+  // 6 chemical composition of radial (non-sticky, from center) and capture (sticky, holds prey) silk ·
+  // 7 tensile strength + viscosity · 8 three species, two sites, Hawaiian archipelago · 9 significant interspecies variation
+  const PASSAGE = {
+    // Original College Board wording (typos from the PDF extraction fixed).
+    serious: `Through adaptive radiation, multiple species of Tetragnatha—a genus of orb-weaving spiders—have significantly diversified their web architecture over a relatively short timescale. To investigate whether the material properties of Tetragnatha silk have been similarly affected by this evolutionary process, Angela M. Alicea-Serrano et al. examined the chemical composition of both the radial (non-sticky threads extending from the center) and capture (sticky threads that hold prey) silks that form the web as well as tested the tensile strength and viscosity of samples collected from three Tetragnatha species at two sites in the Hawaiian archipelago. The team found significant interspecies variation in these biomaterials.`,
+    fun: `Meet Tetragnatha, a genus of orb-weaving spiders on a remarkable evolutionary journey. Through adaptive radiation, its species have dramatically reinvented the architecture of their webs in a surprisingly short time. But had their silk changed too? To find out, Angela M. Alicea-Serrano and her team gathered samples from three Tetragnatha species at two sites across the Hawaiian archipelago. They analyzed the chemistry of the web’s two kinds of silk: the radial threads, non-sticky strands reaching out from the center, and the capture threads, sticky strands that snag prey. Then they put the silk to the test, measuring its tensile strength and viscosity. The verdict? The silk differed significantly from species to species.`,
+    brainrot: `ok so Tetragnatha is a genus of orb-weaving spiders and ngl their evolution arc is lowkey insane. through adaptive radiation, a bunch of species glowed up their web architecture in a pretty short timescale fr. so Angela M. Alicea-Serrano et al. were like: did the silk get the glow-up too?? they grabbed samples from three Tetragnatha species at two sites in the Hawaiian archipelago (main character location, no cap). they checked the chemical composition of the radial silk (the non-sticky threads coming out from the center) and the capture silk (the sticky threads that trap prey, pure rizz). then they tested tensile strength and viscosity. the verdict: the silk was different between species, big time. evolution really ate.`,
+  };
+
+  // Correct answer listed first; options are shuffled on screen.
+  const QUESTIONS = [
+    { id: 'main', prompt: 'Which choice best states the main idea of the passage?', options: [
+      'Research suggests that the material properties of silk from species of Tetragnatha spiders have diversified during adaptive radiation.',
+      'Research reveals that web architecture among species of Tetragnatha spiders has likely diversified more rapidly than the material properties of their silk.',
+      'A study indicates that variations in web architecture among species of Tetragnatha spiders can likely be explained by corresponding variations in the material properties of their silks.',
+      'A study shows that adaptive radiation can explain interspecies variation in the web architecture of Tetragnatha spiders but not in the material properties of the spiders’ silk.',
+    ] },
+    { id: 'already_changed', prompt: 'Before this study, what was already known to have diversified quickly among Tetragnatha species?', options: [
+      'The architecture of their webs', 'Their body size', 'Their venom', 'Their diet' ] },
+    { id: 'sticky', prompt: 'Which kind of silk is the sticky kind that holds prey?', options: [
+      'Capture silk', 'Radial silk', 'Both kinds', 'Neither kind' ] },
+    { id: 'where', prompt: 'Where were the spider samples collected?', options: [
+      'The Hawaiian archipelago', 'The Galápagos Islands', 'Madagascar', 'The Caribbean' ] },
+    { id: 'tests', prompt: 'Besides chemical composition, which properties of the silk did the researchers test?', options: [
+      'Tensile strength and viscosity', 'Color and thickness', 'Length and weight', 'Electrical conductivity and elasticity' ] },
+  ];
+
+  await kit.show({
+    title: 'Reading',
+    html: `<p>On the next screen you’ll read a short passage about a scientific study. Read it carefully:
+      afterwards you’ll answer a few questions about it <strong>without</strong> the passage in front of you.</p>
+      <p>Take as long as you need.</p>`,
+    button: 'Show passage',
+  });
+
+  const readMs = await kit.show({
+    id: 'passage',
+    html: `<div class="passage">${StudyKit.esc(PASSAGE[kit.condition])}</div>`,
+    button: 'I’ve finished reading',
+    minMs: 5000,
+  });
+  kit.set('reading_ms', readMs);
+
+  const ans = await kit.ask({
+    id: 'questions',
+    title: 'Questions about the passage',
+    intro: '<p class="sk-muted">If you’re not sure, take your best guess.</p>',
+    questions: QUESTIONS.map(q => ({
+      id: 'a_' + q.id, type: 'mc', prompt: q.prompt, shuffle: true,
+      options: q.options.map(o => ({ value: o, label: StudyKit.esc(o) })),
+    })),
+  });
+  let details = 0;
+  QUESTIONS.forEach(q => {
+    const ok = ans['a_' + q.id] === q.options[0] ? 1 : 0;
+    kit.set('q_' + q.id, ok);
+    if (q.id !== 'main') details += ok;
+  });
+  kit.set('score_details', details);
+  kit.set('score_total', details + kit.data.q_main);
+
+  const agree = ['Strongly disagree', 'Strongly agree'];
+  await kit.ask({
+    id: 'ratings',
+    questions: [
+      { id: 'r_easy', type: 'scale', min: 1, max: 5, labels: agree, prompt: 'The passage was easy to understand.' },
+      { id: 'r_interesting', type: 'scale', min: 1, max: 5, labels: agree, prompt: 'The passage was interesting to read.' },
+      { id: 'slang_familiarity', type: 'scale', min: 1, max: 5, labels: ['Not at all', 'Extremely'],
+        prompt: 'How familiar are you with current internet slang (for example “no cap,” “rizz,” “lowkey”)?' },
+    ],
+  });
+
+  kit.finish();
+})();
+</script>
+</body>
+</html>

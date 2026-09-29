@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Screen Time</title>
+  <link rel="stylesheet" href="../../lib/study-kit.css">
+</head>
+<body>
+<script src="../../lib/study-kit.js"></script>
+<script>
+/*
+ * Cactus Team — Wed 10:10
+ * Question:  Does age of first social media exposure correlate with current daily screen time?
+ * Design:    No manipulation, no conditions — a plain three-question observational survey, built
+ *            exactly as the team specified. Single page, one shot at each answer (no going back,
+ *            which is the wrapper's default behavior anyway).
+ * Measures:  age_first_social (forced numeric), most_used_app (short answer, free text),
+ *            screen_time_hours (forced positive numeric, decimals allowed). The team's own
+ *            planned analysis is a scatterplot of age_first_social (x) vs. screen_time_hours (y);
+ *            most_used_app is their second IV, to be grouped/color-coded in that same plot.
+ */
+(async () => {
+  const kit = await StudyKit.start({ id: 'cactus-1010' });
+
+  await kit.show({
+    title: 'A few questions',
+    html: `<p>Three quick questions about your phone use.</p>`,
+    button: 'Continue',
+  });
+
+  await kit.ask({
+    id: 'survey',
+    title: 'Phone use',
+    questions: [
+      {
+        id: 'age_first_social', type: 'number', min: 0, max: 100,
+        prompt: 'How old were you when you made your first account on social media (not including YouTube)?',
+        suffix: 'years old',
+      },
+      {
+        id: 'most_used_app', type: 'text',
+        prompt: 'What is the most used app on your phone?',
+        placeholder: 'e.g. Instagram',
+      },
+      {
+        id: 'screen_time_hours', type: 'number', integer: false, min: 0, max: 24,
+        prompt: 'What is your average daily phone screen time, in hours?',
+        suffix: 'hours/day',
+      },
+    ],
+  });
+
+  kit.finish();
+})();
+</script>
+</body>
+</html>

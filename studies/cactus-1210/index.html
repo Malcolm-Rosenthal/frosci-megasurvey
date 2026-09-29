@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Opinions</title>
+  <link rel="stylesheet" href="../../lib/study-kit.css">
+  <style>
+    .idbox { margin: 16px 0 4px; }
+    .idbanner { background: var(--accent-soft); border: 1px solid var(--accent); border-radius: 10px; padding: 10px 14px; margin-bottom: 20px; font-size: .92rem; }
+    .skip { background: none; border: 0; color: var(--muted); text-decoration: underline; font: inherit; font-size: .9rem; cursor: pointer; padding: 8px 0; }
+  </style>
+</head>
+<body>
+<script src="../../lib/study-kit.js"></script>
+<script>
+/*
+ * Cactus Team — Wed 12:10
+ * Question:  Do people give more conventional answers to opinion questions when they believe they're identified?
+ * Design:    Between subjects. ANONYMOUS: told (truthfully) that answers are anonymous.
+ *            IDENTIFIED: told answers in this section will be linked to their identity and asked to type their
+ *            name or UNI. THIS IS A DECEPTION: the typed text is never saved, sent or logged in any form, and
+ *            is erased from the page when they continue. They're debriefed immediately afterwards and can choose
+ *            to have their answers discarded. They can also skip the section instead of entering a name.
+ * Items:     4 opinion items on 1–10 scales, each with "Prefer not to answer" (order shuffled):
+ *            campus gates (campus politics), Mamdani (city politics), giving change (generosity), hot dog (control).
+ *            Dropped by Mal: AI misuse admission, pro-life item. Two Columbia items merged into one.
+ * Analysis:  spread (SD) and mean of each item by condition; rate of "prefer not to answer"; skip rate.
+ */
+(async () => {
+  const kit = await StudyKit.start({ id: 'cactus-1210', conditions: ['anonymous', 'identified'] });
+  const esc = StudyKit.esc;
+  const identified = kit.condition === 'identified';
+
+  const agree = ['Strongly disagree', 'Strongly agree'];
+  const ITEMS = [
+    { id: 'gates',   labels: agree, prompt: 'Columbia University should reopen its campus gates.' },
+    { id: 'mamdani', labels: agree, prompt: 'I support Mayor Zohran Mamdani’s policies.' },
+    { id: 'change',  labels: ['Very unlikely', 'Very likely'],
+      prompt: 'If you were walking down the street and a homeless person asked you for money, how likely would you be to give them the last of your change?' },
+    { id: 'hotdog',  labels: agree, prompt: 'A hot dog is a sandwich.' },
+  ];
+
+  let banner = '';
+  let skipped = false;
+
+  if (!identified) {
+    await kit.show({
+      title: 'Your opinions',
+      html: `<p>In this section you’ll rate how much you agree with a few statements.</p>
+             <p>Like the rest of this survey, your answers here are <strong>completely anonymous</strong>.</p>`,
+    });
+  } else {
+    // The name/UNI box. Deliberately NOT a form field with a name, autocomplete off, never read into any variable
+    // that is saved: we only check that something was typed, then wipe it and remove the element.
+    const root = kit.stage('');
+    root.className = 'sk-card';
+    root.innerHTML = `<h2>Your opinions</h2>
+      <p>In this section you’ll rate how much you agree with a few statements.</p>
+      <p><strong>Unlike the rest of this survey, your answers in this section will be linked to your identity.</strong>
+      They will be stored separately from your other survey responses, together with your name.</p>
+      <div class="idbox"><label for="who" class="sk-q-prompt" style="display:block">Enter your full name or Columbia UNI</label>
+        <input id="who" class="sk-input" type="text" autocomplete="off" autocapitalize="words" spellcheck="false" data-lpignore="true" data-1p-ignore></div>
+      <div class="sk-actions"><button class="skip" type="button">I’d rather skip this section</button>
+        <button class="sk-btn" type="button" disabled>Continue</button></div>`;
+    const who = root.querySelector('#who'), go = root.querySelector('.sk-btn'), skip = root.querySelector('.skip');
+    who.addEventListener('input', () => { go.disabled = who.value.trim().length < 2; });
+    const choice = await new Promise(res => {
+      go.addEventListener('click', () => res('go'), { once: true });
+      skip.addEventListener('click', () => res('skip'), { once: true });
+    });
+    // Show their own words back on the next page (makes the manipulation believable), then erase.
+    // This string lives only in this browser tab's memory and is never passed to kit.set / finish.
+    banner = choice === 'go'
+      ? `<div class="idbanner">Responses in this section will be linked to: <strong>${esc(who.value.trim())}</strong></div>` : '';
+    who.value = '';
+    root.innerHTML = '';
+    skipped = choice === 'skip';
+    kit.set('skipped_section', skipped);
+  }
+
+  if (!skipped) {
+    const order = kit.shuffle(ITEMS);
+    kit.set('item_order', order.map(i => i.id));
+    await kit.ask({
+      id: 'opinions',
+      intro: banner,
+      questions: order.map(it => ({
+        id: it.id, type: 'scale', min: 1, max: 10, labels: it.labels, prompt: it.prompt, optOut: true,
+      })),
+    });
+    banner = '';   // drop the only copy of the typed name
+    kit.set('n_prefer_not', ITEMS.filter(i => kit.data[i.id] === 'prefer_not').length);
+
+    // Manipulation check, asked of both groups BEFORE any debrief.
+    await kit.ask({
+      id: 'check',
+      questions: [{ id: 'felt_anonymous', type: 'scale', min: 1, max: 5, labels: ['Not at all', 'Completely'],
+                    prompt: 'While answering those statements, how anonymous did you feel your answers were?' }],
+    });
+  }
+
+  if (identified) {
+    const debrief = `<p><strong>Your answers in this section were never linked to you.</strong></p>
+      <p>What you typed was never saved or sent anywhere: it was erased from the page as soon as you clicked Continue.
+      Like the rest of this survey, everything here is completely anonymous.</p>
+      <p>This section was an experiment on whether people answer opinion questions differently when they
+      <em>believe</em> they can be identified. Telling you otherwise was part of the experiment, and we’re sorry for the fib.</p>`;
+    if (skipped) {
+      await kit.show({ title: 'A quick explanation', html: debrief });
+    } else {
+      const r = await kit.ask({
+        id: 'debrief',
+        title: 'A quick explanation',
+        intro: debrief,
+        questions: [{ id: 'keep', type: 'mc', prompt: 'Now that you know, can we use your answers from this section?',
+          options: [{ value: 'keep', label: 'Yes, keep my answers' }, { value: 'discard', label: 'No, please discard my answers' }] }],
+      });
+      if (r.keep === 'discard') {
+        // Keep only the fact of withdrawal (and the condition, which the wrapper records anyway).
+        kit.data = { withdrawn: true };
+      }
+    }
+  }
+
+  kit.finish();
+})();
+</script>
+</body>
+</html>
