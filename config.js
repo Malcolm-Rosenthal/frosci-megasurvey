@@ -5,11 +5,11 @@
  */
 window.MEGASURVEY_CONFIG = {
   title: 'Frontiers of Science Survey',
-  version: '2026.09-dev',
+  version: '2026.09-v1',
 
   // Google Apps Script web-app URL (ends in /exec). Leave '' while developing:
   // the survey runs normally but nothing is sent anywhere.
-  endpoint: '',
+  endpoint: 'https://script.google.com/macros/s/AKfycbwdiRDn-WIbekNFl1PhOGudFFaLoxNMtAr8FKnqIazNSyIU0h__6CrVOkvdLsczQsM_/exec',
 
   // ---------------- wrapper screens ----------------
   // Landing page: kept short — students already discussed the survey in class.
